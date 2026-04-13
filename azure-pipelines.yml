@@ -90,29 +90,29 @@ stages:
               ArtifactName: 'drop'
               publishLocation: 'Container'
 
-  # ── Stage 2: Deploy (main branch only) ────────────────────────────────────
-  - stage: Deploy
-    displayName: 'Deploy to Azure App Service'
-    dependsOn: Build
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
-    jobs:
-      - deployment: DeployJob
-        displayName: 'Deploy'
-        pool:
-          vmImage: 'ubuntu-latest'
-        environment: 'production'
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - download: current
-                  artifact: drop
-
-                - task: AzureWebApp@1
-                  displayName: 'Deploy to App Service'
-                  inputs:
-                    azureSubscription: '$(azureSubscription)'
-                    appType: 'webAppLinux'
-                    appName: '$(appServiceName)'
-                    package: '$(Pipeline.Workspace)/drop/**/*.zip'
-                    deploymentMethod: 'auto'
+  # ── Stage 2: Deploy (commented out until service connection is set up) ───────
+  # Uncomment this stage after creating the service connection and variables.
+  # - stage: Deploy
+  #   displayName: 'Deploy to Azure App Service'
+  #   dependsOn: Build
+  #   condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  #   jobs:
+  #     - deployment: DeployJob
+  #       displayName: 'Deploy'
+  #       pool:
+  #         vmImage: 'ubuntu-latest'
+  #       environment: 'production'
+  #       strategy:
+  #         runOnce:
+  #           deploy:
+  #             steps:
+  #               - download: current
+  #                 artifact: drop
+  #               - task: AzureWebApp@1
+  #                 displayName: 'Deploy to App Service'
+  #                 inputs:
+  #                   azureSubscription: '$(azureSubscription)'
+  #                   appType: 'webAppLinux'
+  #                   appName: '$(appServiceName)'
+  #                   package: '$(Pipeline.Workspace)/drop/**/*.zip'
+  #                   deploymentMethod: 'auto'
