@@ -1,0 +1,118 @@
+# Azure Pipelines — azure-demo (.NET 8 Web API)
+#
+# Required pipeline variables (set in Azure DevOps > Pipelines > your pipeline > Variables):
+#   azureSubscription  — name of your ARM service connection
+#   appServiceName     — name of your Azure App Service
+
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  buildConfiguration: 'Release'
+  dotnetVersion: '8.x'
+
+stages:
+
+  # ── Stage 1: Build, Lint, Test, Publish ───────────────────────────────────
+  - stage: Build
+    displayName: 'Build & Analyze'
+    jobs:
+      - job: BuildJob
+        displayName: 'Build · Lint · Test · Artifact'
+        pool:
+          vmImage: 'ubuntu-latest'
+
+        steps:
+          - task: UseDotNet@2
+            displayName: 'Use .NET $(dotnetVersion)'
+            inputs:
+              packageType: 'sdk'
+              version: '$(dotnetVersion)'
+
+          - task: DotNetCoreCLI@2
+            displayName: 'Restore'
+            inputs:
+              command: 'restore'
+              projects: 'azure-demo.sln'
+
+          - task: DotNetCoreCLI@2
+            displayName: 'Lint — dotnet format'
+            inputs:
+              command: 'custom'
+              custom: 'format'
+              arguments: 'azure-demo.sln --verify-no-changes --verbosity diagnostic'
+
+          - task: DotNetCoreCLI@2
+            displayName: 'Build'
+            inputs:
+              command: 'build'
+              projects: 'azure-demo.sln'
+              arguments: '--configuration $(buildConfiguration) --no-restore'
+
+          - task: DotNetCoreCLI@2
+            displayName: 'Test'
+            inputs:
+              command: 'test'
+              projects: 'tests/WebApi.Tests/WebApi.Tests.csproj'
+              arguments: >-
+                --configuration $(buildConfiguration)
+                --no-build
+                --collect:"XPlat Code Coverage"
+                --results-directory $(Agent.TempDirectory)/TestResults
+              publishTestResults: true
+
+          - task: PublishCodeCoverageResults@2
+            displayName: 'Publish coverage'
+            inputs:
+              summaryFileLocation: '$(Agent.TempDirectory)/TestResults/**/coverage.cobertura.xml'
+              codecoverageTool: 'cobertura'
+            condition: succeededOrFailed()
+
+          - task: DotNetCoreCLI@2
+            displayName: 'Publish'
+            inputs:
+              command: 'publish'
+              projects: 'src/WebApi/WebApi.csproj'
+              arguments: '--configuration $(buildConfiguration) --no-build --output $(Build.ArtifactStagingDirectory)'
+              zipAfterPublish: true
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Upload artifact'
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+              ArtifactName: 'drop'
+              publishLocation: 'Container'
+
+  # ── Stage 2: Deploy (main branch only) ────────────────────────────────────
+  - stage: Deploy
+    displayName: 'Deploy to Azure App Service'
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: DeployJob
+        displayName: 'Deploy'
+        pool:
+          vmImage: 'ubuntu-latest'
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: drop
+
+                - task: AzureWebApp@1
+                  displayName: 'Deploy to App Service'
+                  inputs:
+                    azureSubscription: '$(azureSubscription)'
+                    appType: 'webAppLinux'
+                    appName: '$(appServiceName)'
+                    package: '$(Pipeline.Workspace)/drop/**/*.zip'
+                    deploymentMethod: 'auto'
