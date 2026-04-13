@@ -27,7 +27,7 @@ stages:
       - job: BuildJob
         displayName: 'Build · Lint · Test · Artifact'
         pool:
-          vmImage: 'ubuntu-latest'
+          name: Default
 
         steps:
           - task: UseDotNet@2
